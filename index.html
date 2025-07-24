@@ -1,81 +1,17 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>AR.js with Camera Selection</title>
+    <title>AR Sphere</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.2/aframe/build/aframe-ar-nft.min.js"></script>
-    <style>
-      #cameraSelect {
-        position: absolute;
-        z-index: 1000;
-        top: 10px;
-        left: 10px;
-        padding: 5px;
-        font-size: 16px;
-      }
-    </style>
+    <script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.2/aframe/build/aframe-ar.min.js"></script>
   </head>
-  <body style="margin:0; overflow:hidden;">
-    <select id="cameraSelect"></select>
-
-    <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs>
+  <body style="margin: 0; overflow: hidden">
+    <a-scene embedded arjs>
       <a-marker type="pattern" url="marker-animal.patt">
         <a-sphere position="0 0.5 0" radius="0.3" color="#00FF00"></a-sphere>
       </a-marker>
       <a-entity camera></a-entity>
     </a-scene>
-
-    <script>
-      const cameraSelect = document.getElementById("cameraSelect");
-
-      // カメラ一覧を取得
-      navigator.mediaDevices.enumerateDevices().then(function (devices) {
-        const videoInputs = devices.filter(device => device.kind === 'videoinput');
-        videoInputs.forEach((device, index) => {
-          const option = document.createElement("option");
-          option.value = device.deviceId;
-          option.text = device.label || `Camera ${index + 1}`;
-          cameraSelect.appendChild(option);
-        });
-
-        // 初期値を背面カメラっぽいものに自動選択
-        const backCamera = videoInputs.find(d => d.label.toLowerCase().includes('back'));
-        if (backCamera) {
-          cameraSelect.value = backCamera.deviceId;
-        }
-
-        startAR(cameraSelect.value);
-      });
-
-      // カメラ選択変更で再起動
-      cameraSelect.addEventListener("change", () => {
-        location.reload(); // 再読込して反映（簡易的対応）
-      });
-
-      // A-Frame＋AR.js にカメラIDを渡して起動
-      function startAR(deviceId) {
-        // すでに初期化された場合は何もしない
-        if (AFRAME.scenes.length === 0) return;
-
-        const sceneEl = AFRAME.scenes[0];
-        sceneEl.addEventListener("loaded", () => {
-          const arSystem = sceneEl.systems["arjs"];
-          if (arSystem.arToolkitSource) {
-            arSystem.arToolkitSource.init(() => {
-              arSystem.arToolkitSource.domElement.srcObject = null;
-
-              navigator.mediaDevices.getUserMedia({
-                video: { deviceId: { exact: deviceId } },
-              }).then((stream) => {
-                arSystem.arToolkitSource.domElement.srcObject = stream;
-                arSystem.arToolkitSource.domElement.play();
-              });
-            });
-          }
-        });
-      }
-    </script>
   </body>
 </html>
-
