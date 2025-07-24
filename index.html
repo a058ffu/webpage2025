@@ -1,153 +1,81 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>白い紙に「ありがとう」</title>
-  <style>
-    canvas { position: absolute; top: 0; left: 0; }
-    video { display: none; }
-  </style>
-</head>
-<body>
-  <video id="video" autoplay playsinline width="640" height="480"></video>
-  <canvas id="canvas" width="640" height="480"></canvas>
+  <head>
+    <title>AR.js with Camera Selection</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.2/aframe/build/aframe-ar-nft.min.js"></script>
+    <style>
+      #cameraSelect {
+        position: absolute;
+        z-index: 1000;
+        top: 10px;
+        left: 10px;
+        padding: 5px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body style="margin:0; overflow:hidden;">
+    <select id="cameraSelect"></select>
 
-  <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs>
+      <a-marker type="pattern" url="marker-animal.patt">
+        <a-sphere position="0 0.5 0" radius="0.3" color="#00FF00"></a-sphere>
+      </a-marker>
+      <a-entity camera></a-entity>
+    </a-scene>
 
-    // カメラにアクセス
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => {
-        video.srcObject = stream;
-      })
-      .catch(err => {
-        console.error("カメラエラー:", err);
+    <script>
+      const cameraSelect = document.getElementById("cameraSelect");
+
+      // カメラ一覧を取得
+      navigator.mediaDevices.enumerateDevices().then(function (devices) {
+        const videoInputs = devices.filter(device => device.kind === 'videoinput');
+        videoInputs.forEach((device, index) => {
+          const option = document.createElement("option");
+          option.value = device.deviceId;
+          option.text = device.label || `Camera ${index + 1}`;
+          cameraSelect.appendChild(option);
+        });
+
+        // 初期値を背面カメラっぽいものに自動選択
+        const backCamera = videoInputs.find(d => d.label.toLowerCase().includes('back'));
+        if (backCamera) {
+          cameraSelect.value = backCamera.deviceId;
+        }
+
+        startAR(cameraSelect.value);
       });
 
-    function detectWhitePaper(imageData) {
-      const threshold = 230; // RGBすべてがこの値以上で「白」とみなす
-      const width = canvas.width;
-      const height = canvas.height;
-      const data = imageData.data;
+      // カメラ選択変更で再起動
+      cameraSelect.addEventListener("change", () => {
+        location.reload(); // 再読込して反映（簡易的対応）
+      });
 
-      let minX = width, minY = height, maxX = 0, maxY = 0;
+      // A-Frame＋AR.js にカメラIDを渡して起動
+      function startAR(deviceId) {
+        // すでに初期化された場合は何もしない
+        if (AFRAME.scenes.length === 0) return;
 
-      for (let y = 0; y < height; y += 4) {
-        for (let x = 0; x < width; x += 4) {
-          const i = (y * width + x) * 4;
-          const r = data[i], g = data[i + 1], b = data[i + 2];
+        const sceneEl = AFRAME.scenes[0];
+        sceneEl.addEventListener("loaded", () => {
+          const arSystem = sceneEl.systems["arjs"];
+          if (arSystem.arToolkitSource) {
+            arSystem.arToolkitSource.init(() => {
+              arSystem.arToolkitSource.domElement.srcObject = null;
 
-          if (r > threshold && g > threshold && b > threshold) {
-            if (x < minX) minX = x;
-            if (y < minY) minY = y;
-            if (x > maxX) maxX = x;
-            if (y > maxY) maxY = y;
+              navigator.mediaDevices.getUserMedia({
+                video: { deviceId: { exact: deviceId } },
+              }).then((stream) => {
+                arSystem.arToolkitSource.domElement.srcObject = stream;
+                arSystem.arToolkitSource.domElement.play();
+              });
+            });
           }
-        }
+        });
       }
-
-      // 一定サイズ以上の白領域を紙とみなす
-      if ((maxX - minX > 100) && (maxY - minY > 100)) {
-        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-      } else {
-        return null;
-      }
-      
-      
-    }
-
-    function render() {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const rect = detectWhitePaper(imageData);
-
-      if (rect) {
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-
-        ctx.fillStyle = "black";
-        ctx.font = "30px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("ありがとう", rect.x + rect.w / 2, rect.y + rect.h / 2);
-      }
-      let wasBright = false;
-let wasDark = false;
-let showThanks = false;
-let showWelcome = false;
-let frameCounter = 0;
-
-function isSceneDark(imageData) {
-  const data = imageData.data;
-  let brightnessSum = 0;
-  let count = 0;
-
-  for (let i = 0; i < data.length; i += 16) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
-    const brightness = (r + g + b) / 3;
-    brightnessSum += brightness;
-    count++;
-  }
-
-  const avgBrightness = brightnessSum / count;
-  return avgBrightness < 50; // 閾値（暗い）
-}
-
-function render() {
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const rect = detectWhitePaper(imageData);
-  const isDark = isSceneDark(imageData);
-
-  if (rect) {
-    showThanks = true;
-    showWelcome = false;
-    wasBright = true;
-    wasDark = false;
-  }
-
-  if (wasBright && !wasDark && isDark) {
-    // 一度暗くなった
-    wasDark = true;
-  }
-
-  if (wasDark && !isDark) {
-    // 再び明るくなったら「どういたしまして」
-    showThanks = false;
-    showWelcome = true;
-    wasBright = false;
-    wasDark = false;
-  }
-
-  if (showThanks && rect) {
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
-    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-
-    ctx.fillStyle = "black";
-    ctx.font = "30px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("ありがとう", rect.x + rect.w / 2, rect.y + rect.h / 2);
-  } else if (showWelcome) {
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.fillRect(50, 50, 540, 100);
-
-    ctx.fillStyle = "black";
-    ctx.font = "40px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("どういたしまして", canvas.width / 2, 110);
-  }
-
-  requestAnimationFrame(render);
-}
-
-
-      requestAnimationFrame(render);
-    }
-
-    video.addEventListener('loadeddata', () => {
-      render();
-    });
-  </script>
-</body>
+    </script>
+  </body>
 </html>
+
